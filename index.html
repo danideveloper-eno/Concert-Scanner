@@ -562,6 +562,25 @@
     padding:12px 14px;
   }
 
+  .log-item{
+    width:100%;
+    text-align:left;
+    color:#fff;
+    cursor:pointer;
+  }
+
+  button.log-item{
+    appearance:none;
+    -webkit-appearance:none;
+    font:inherit;
+    background:rgba(255,255,255,.03);
+  }
+
+  button.log-item:hover{
+    background:rgba(255,255,255,.06);
+    border-color:rgba(255,255,255,.16);
+  }
+
   .log-row{
     display:flex;
     align-items:center;
@@ -574,6 +593,13 @@
     font-weight:700;
     color:#fff;
     word-break:break-word;
+  }
+
+  .log-sub{
+    color:var(--muted);
+    font-size:11px;
+    margin-top:6px;
+    line-height:1.5;
   }
 
   .log-time{
@@ -608,6 +634,105 @@
     margin:16px 0 4px;
   }
 
+  .modal{
+    position:fixed;
+    inset:0;
+    z-index:60;
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+    padding:16px;
+    background:rgba(0,0,0,.74);
+    backdrop-filter:blur(6px);
+  }
+
+  .modal-card{
+    width:min(100%, 760px);
+    max-height:92vh;
+    overflow:auto;
+    border-radius:24px;
+    border:1px solid rgba(255,255,255,.12);
+    background:linear-gradient(180deg, rgba(22,22,22,.98), rgba(10,10,10,.98));
+    box-shadow:0 24px 70px rgba(0,0,0,.5);
+    padding:18px;
+  }
+
+  .modal-head{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:14px;
+  }
+
+  .modal-title{
+    font-size:22px;
+    font-weight:800;
+    line-height:1.1;
+  }
+
+  .modal-sub{
+    color:var(--muted);
+    font-size:12px;
+    margin-top:8px;
+    line-height:1.6;
+  }
+
+  .modal-close{
+    width:auto;
+    min-width:92px;
+    padding:12px 14px;
+  }
+
+  .detail-grid{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0,1fr));
+    gap:10px;
+  }
+
+  .detail-card{
+    border:1px solid rgba(255,255,255,.08);
+    background:rgba(255,255,255,.03);
+    border-radius:18px;
+    padding:12px 14px;
+  }
+
+  .detail-label{
+    color:var(--muted);
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.12em;
+    margin-bottom:8px;
+  }
+
+  .detail-value{
+    font-size:15px;
+    font-weight:700;
+    line-height:1.6;
+    word-break:break-word;
+  }
+
+  .detail-value.mono{
+    font-family:Arial, Helvetica, sans-serif;
+    letter-spacing:.03em;
+  }
+
+  .modal-status{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    border-radius:999px;
+    padding:8px 12px;
+    border:1px solid rgba(255,255,255,.10);
+    background:rgba(255,255,255,.05);
+    color:#fff;
+    font-size:11px;
+    font-weight:800;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    margin-bottom:14px;
+  }
+
   .hide{display:none!important}
 
   @media (min-width: 920px){
@@ -627,10 +752,12 @@
     .manual-wrap{grid-template-columns:1fr}
     .token-actions{grid-template-columns:1fr}
     .info-grid{grid-template-columns:1fr}
+    .detail-grid{grid-template-columns:1fr}
     .topbar{flex-direction:column;align-items:stretch}
     .scanner-head,.section-head{padding:14px 14px 0}
     .preview-shell,.section-body,.controls{padding-left:12px;padding-right:12px}
     .hero{padding:16px}
+    .modal-card{padding:16px}
   }
 </style>
 </head>
@@ -776,7 +903,7 @@
         <div class="section-head">
           <div>
             <div class="section-title">Recent Activity</div>
-            <div class="section-sub">Latest scans during this session.</div>
+            <div class="section-sub">Latest scans during this session. Tap any item to open full details.</div>
           </div>
         </div>
         <div class="section-body">
@@ -789,6 +916,20 @@
   </div>
 
   <div class="footer-note">Ticket validation runs through your deployed Google Apps Script web app.</div>
+</div>
+
+<div id="activityModal" class="modal hide">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="activityModalTitle">Ticket Details</div>
+        <div class="modal-sub" id="activityModalSub">Scan details</div>
+      </div>
+      <button id="closeActivityModal" class="btn ghost modal-close" type="button">Close</button>
+    </div>
+    <div class="modal-status" id="activityModalStatus">Loading</div>
+    <div class="detail-grid" id="activityModalGrid"></div>
+  </div>
 </div>
 
 <script>
@@ -815,6 +956,7 @@ let actx = null;
 let guardToken = "";
 let busyTimer = null;
 let hideTimer = null;
+let activeActivity = null;
 
 $("gateLabel").textContent = GATE_NAME;
 $("infoGate").textContent = GATE_NAME;
@@ -1048,6 +1190,13 @@ $("manualId").addEventListener("keydown", e => {
 $("saveTokenBtn").onclick = saveGuardToken;
 $("clearTokenBtn").onclick = clearGuardToken;
 $("toggleTokenBtn").onclick = toggleGuardTokenVisibility;
+$("closeActivityModal").onclick = closeActivityModal;
+$("activityModal").addEventListener('click', e => {
+  if (e.target.id === 'activityModal') closeActivityModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeActivityModal();
+});
 $("guardTokenInput").addEventListener("keydown", e => {
   if (e.key === "Enter") saveGuardToken();
 });
@@ -1076,7 +1225,16 @@ async function verify(code){
     setStatusChip("Network Error");
     setLastResult("Connection Error");
     show("invalid", "🌐 Connection Error", navigator.onLine ? String(e) : "Internet connection is offline");
-    addLog(code, "Network error");
+    addLog(buildActivityEntry({
+      id: '',
+      code: code,
+      name: code,
+      statusText: 'Network Error',
+      scanStatus: 'network_error',
+      ticketType: '',
+      source: '',
+      gate: GATE_NAME
+    }));
   }finally{
     schedulePostScanReset();
   }
@@ -1093,7 +1251,17 @@ function render(res, code){
         "✅ Approved",
         `<b>${esc(res.name)}</b><br><span class="k">Ticket Type</span> ${esc(res.ticketType)}<br><span class="k">Code</span> <span dir="ltr">${esc(res.id)}</span>`
       );
-      addLog(res.name || code, "Entry Approved");
+      addLog(buildActivityEntry({
+        id: res.id,
+        code: code,
+        name: res.name,
+        statusText: 'Entry Approved',
+        scanStatus: res.status,
+        ticketType: res.ticketType,
+        arrivalDate: res.arrivalDate,
+        source: res.source,
+        gate: GATE_NAME
+      }));
       refreshStats();
       break;
 
@@ -1102,7 +1270,17 @@ function render(res, code){
       setStatusChip("Preview Valid");
       setLastResult("Valid Preview");
       show("success", "✅ Valid (Not Registered)", esc(res.name));
-      addLog(res.name || code, "Preview Valid");
+      addLog(buildActivityEntry({
+        id: res.id,
+        code: code,
+        name: res.name,
+        statusText: 'Preview Valid',
+        scanStatus: res.status,
+        ticketType: res.ticketType,
+        arrivalDate: res.arrivalDate,
+        source: res.source,
+        gate: GATE_NAME
+      }));
       break;
 
     case "already_used":
@@ -1114,7 +1292,17 @@ function render(res, code){
         "⚠️ Already Used",
         `<b>${esc(res.name || "")}</b><br><span class="k">Previous Entry</span> <span dir="ltr">${esc(res.arrivalDate || "?")}</span>`
       );
-      addLog(res.name || code, "Already Used");
+      addLog(buildActivityEntry({
+        id: res.id,
+        code: code,
+        name: res.name,
+        statusText: 'Already Used',
+        scanStatus: res.status,
+        ticketType: res.ticketType,
+        arrivalDate: res.arrivalDate,
+        source: res.source,
+        gate: GATE_NAME
+      }));
       break;
 
     case "not_valid":
@@ -1126,7 +1314,17 @@ function render(res, code){
         res.reason === "unpaid" ? "⛔ Unpaid" : "⛔ Ticket Not Active",
         esc(res.name || "") + (res.ticketType ? "<br>" + esc(res.ticketType) : "")
       );
-      addLog(res.name || code, res.reason === "unpaid" ? "Unpaid" : "Not Active");
+      addLog(buildActivityEntry({
+        id: res.id,
+        code: code,
+        name: res.name || code,
+        statusText: res.reason === "unpaid" ? 'Unpaid' : 'Not Active',
+        scanStatus: res.status,
+        ticketType: res.ticketType,
+        arrivalDate: res.arrivalDate,
+        source: res.source,
+        gate: GATE_NAME
+      }));
       break;
 
     case "unauthorized":
@@ -1134,14 +1332,31 @@ function render(res, code){
       setStatusChip("Unauthorized");
       setLastResult("Unauthorized");
       show("invalid", "🔒 Unauthorized", "Guard token is incorrect.");
-      addLog(code, "Unauthorized");
+      addLog(buildActivityEntry({
+        id: '',
+        code: code,
+        name: code,
+        statusText: 'Unauthorized',
+        scanStatus: res.status,
+        source: '',
+        gate: GATE_NAME
+      }));
       break;
 
     case "busy":
       setStatusChip("Busy");
       setLastResult("Busy");
       show("neutral", "⏳ Busy", "Please scan again.");
-      addLog(code, "Busy");
+      addLog(buildActivityEntry({
+        id: res.id || '',
+        code: code,
+        name: res.name || code,
+        statusText: 'Busy',
+        scanStatus: res.status,
+        ticketType: res.ticketType,
+        source: res.source,
+        gate: GATE_NAME
+      }));
       break;
 
     case "error":
@@ -1149,7 +1364,16 @@ function render(res, code){
       setStatusChip("Server Error");
       setLastResult("Server Error");
       show("invalid", "⛔ Server Error", esc(res.message || ""));
-      addLog(code, "Server Error");
+      addLog(buildActivityEntry({
+        id: res.id || '',
+        code: code,
+        name: res.name || code,
+        statusText: 'Server Error',
+        scanStatus: res.status,
+        ticketType: res.ticketType,
+        source: res.source,
+        gate: GATE_NAME
+      }));
       break;
 
     default:
@@ -1165,7 +1389,16 @@ function render(res, code){
             ? "This code does not exist in the system"
             : esc(res.message || "")
       );
-      addLog(code, "Invalid");
+      addLog(buildActivityEntry({
+        id: res.id || '',
+        code: code,
+        name: res.name || code,
+        statusText: 'Invalid',
+        scanStatus: res.reason || res.status,
+        ticketType: res.ticketType,
+        source: res.source,
+        gate: GATE_NAME
+      }));
   }
 }
 
@@ -1192,6 +1425,97 @@ function schedulePostScanReset(){
   }, RESULT_VISIBLE_MS);
 }
 
+function activitySummary(entry){
+  return [entry.statusText, entry.ticketType, entry.id].filter(Boolean).join(' · ');
+}
+
+function openActivityModal(entry){
+  activeActivity = entry;
+  $("activityModal").classList.remove("hide");
+  document.body.style.overflow = "hidden";
+  $("activityModalTitle").textContent = entry.name || entry.id || entry.code || "Ticket Details";
+  $("activityModalSub").textContent = entry.scanTime || turkeyTime(new Date(), true);
+  $("activityModalStatus").textContent = entry.statusText || "Record";
+  $("activityModalGrid").innerHTML = '<div class="detail-card"><div class="detail-label">Loading</div><div class="detail-value">Fetching ticket details...</div></div>';
+}
+
+function closeActivityModal(){
+  $("activityModal").classList.add("hide");
+  document.body.style.overflow = "";
+  activeActivity = null;
+}
+
+function detailCard(label, value, mono){
+  return `<div class="detail-card"><div class="detail-label">${esc(label)}</div><div class="detail-value${mono ? ' mono' : ''}">${esc(value || '—')}</div></div>`;
+}
+
+function renderActivityDetails(data, entry, errorText){
+  const title = (data && data.fullName) || entry.name || data.id || entry.id || entry.code || 'Ticket Details';
+  const subtitle = [entry.scanTime, entry.gate ? ('Gate ' + entry.gate) : '', entry.scanStatus].filter(Boolean).join(' · ');
+  $("activityModalTitle").textContent = title;
+  $("activityModalSub").textContent = subtitle || turkeyTime(new Date(), true);
+  $("activityModalStatus").textContent = entry.statusText || (data && data.status) || 'Record';
+
+  const cards = [];
+  cards.push(detailCard('Full Name', (data && data.fullName) || entry.name || ''));
+  cards.push(detailCard('Ticket ID', (data && data.id) || entry.id || entry.code || '', true));
+  cards.push(detailCard('Ticket Type', (data && data.ticketType) || entry.ticketType || ''));
+  cards.push(detailCard('Payment Status', (data && data.paymentStatus) || ''));
+  cards.push(detailCard('Entry Status', (data && data.entryStatus) || ''));
+  cards.push(detailCard('Amount', (data && data.amount) || ''));
+  cards.push(detailCard('Payment Method', (data && data.paymentMethod) || ''));
+  cards.push(detailCard('Tracking Number', (data && data.trackingNumber) || '', true));
+  cards.push(detailCard('Purchase Date', (data && data.purchaseDate) || ''));
+  cards.push(detailCard('Arrival Date', (data && data.arrivalDate) || entry.arrivalDate || ''));
+  cards.push(detailCard('Passport ID', (data && data.passportId) || '', true));
+  cards.push(detailCard('Phone', (data && data.phone) || '', true));
+  cards.push(detailCard('Sex', (data && data.sex) || ''));
+  cards.push(detailCard('Check-in', (data && data.checkin) || ''));
+  cards.push(detailCard('Sheet Row', data && data.row ? String(data.row) : ''));
+  cards.push(detailCard('Source', entry.source || ''));
+  cards.push(detailCard('Gate', entry.gate || ''));
+  cards.push(detailCard('Scan Time', entry.scanTime || ''));
+  if (errorText) cards.push(detailCard('Info', errorText));
+  $("activityModalGrid").innerHTML = cards.join('');
+}
+
+async function showActivityDetails(entry){
+  openActivityModal(entry);
+  if (!entry.id || !SCRIPT_URL || SCRIPT_URL === "PASTE_YOUR_EXEC_URL_HERE") {
+    renderActivityDetails({}, entry, 'Detailed record is not available for this item.');
+    return;
+  }
+  try {
+    const url = SCRIPT_URL
+      + '?action=info&id=' + encodeURIComponent(entry.id)
+      + '&token=' + encodeURIComponent(currentGuardToken())
+      + '&_=' + Date.now();
+    const r = await fetch(url, { method:'GET', redirect:'follow' });
+    const data = await r.json();
+    if (activeActivity !== entry) return;
+    if (data.status === 'ok') renderActivityDetails(data, entry, '');
+    else renderActivityDetails({}, entry, data.message || data.reason || 'Ticket details not found.');
+  } catch (e) {
+    if (activeActivity !== entry) return;
+    renderActivityDetails({}, entry, String(e));
+  }
+}
+
+function buildActivityEntry(payload){
+  return {
+    id: payload.id || '',
+    code: payload.code || payload.id || '',
+    name: payload.name || '',
+    ticketType: payload.ticketType || '',
+    statusText: payload.statusText || '',
+    scanStatus: payload.scanStatus || '',
+    arrivalDate: payload.arrivalDate || '',
+    source: payload.source || '',
+    gate: payload.gate || GATE_NAME,
+    scanTime: payload.scanTime || turkeyTime(new Date(), true)
+  };
+}
+
 function esc(s){
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
     '&':'&amp;',
@@ -1202,17 +1526,20 @@ function esc(s){
   }[c]));
 }
 
-function addLog(who, what){
+function addLog(entry){
   const empty = $("logEmpty");
   if (empty) empty.remove();
 
-  const d = document.createElement("div");
+  const d = document.createElement("button");
+  d.type = "button";
   d.className = "log-item";
   d.innerHTML = `
     <div class="log-row">
-      <div class="log-main">${esc(who)} — ${esc(what)}</div>
-      <div class="log-time">${turkeyTime(new Date(), false)}</div>
-    </div>`;
+      <div class="log-main">${esc(entry.name || entry.id || entry.code || 'Unknown')}</div>
+      <div class="log-time">${esc(entry.scanTime || turkeyTime(new Date(), false))}</div>
+    </div>
+    <div class="log-sub">${esc(activitySummary(entry) || 'Open details')}</div>`;
+  d.addEventListener('click', () => showActivityDetails(entry));
   $("log").prepend(d);
   while ($("log").children.length > 40) $("log").lastChild.remove();
 }
@@ -1253,5 +1580,5 @@ document.addEventListener("visibilitychange", async () => {
   }
 });
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3aecd5edfec0f8b',t:'MTc4OTM4MjcyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3aedfcd4c1b0aae',t:'MTc4OTM4MzQ4Mg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
