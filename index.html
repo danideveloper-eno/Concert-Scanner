@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0b0f19">
+<title>اسکن بلیط — Arman Miladi Concert</title>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0f19; --card:#161b2b; --line:#262e45; --muted:#8b93a7;
+    --ok:#16a34a; --warn:#d97706; --err:#dc2626; --info:#2563eb;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{
+    margin:0;background:var(--bg);color:#fff;min-height:100vh;
+    font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
+    padding:12px;padding-bottom:calc(12px + env(safe-area-inset-bottom));
+  }
+  header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+  h1{font-size:17px;margin:0;font-weight:700}
+  .dot{width:9px;height:9px;border-radius:50%;background:#555;display:inline-block;margin-inline-start:6px}
+  .dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .dot.off{background:var(--err)}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px;text-align:center}
+  .stat b{display:block;font-size:20px;line-height:1.2}
+  .stat span{font-size:11px;color:var(--muted)}
+
+  #reader{width:100%;max-width:460px;margin:0 auto;border-radius:16px;overflow:hidden;background:#000}
+  #reader video{width:100%!important;height:auto!important;display:block}
+
+  .btn{
+    width:100%;font-size:16px;font-weight:700;padding:15px;border-radius:14px;border:none;
+    background:var(--info);color:#fff;margin-top:10px;cursor:pointer;font-family:inherit;
+  }
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:#c7cde0;font-weight:600;font-size:14px;padding:11px}
+  .row{display:flex;gap:8px}
+  .row .btn{margin-top:8px}
+
+  #result{
+    margin-top:12px;padding:20px 16px;border-radius:16px;text-align:center;
+    font-size:21px;font-weight:800;display:none;animation:pop .18s ease-out;
+  }
+  @keyframes pop{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+  .success{background:linear-gradient(160deg,#15803d,#166534)}
+  .used   {background:linear-gradient(160deg,#b45309,#92400e)}
+  .invalid{background:linear-gradient(160deg,#b91c1c,#7f1d1d)}
+  .neutral{background:var(--card);border:1px solid var(--line)}
+  #details{font-size:14px;font-weight:500;margin-top:10px;line-height:1.9;opacity:.95}
+  #details .k{color:rgba(255,255,255,.65);font-size:12px}
+
+  .manual{margin-top:12px;display:flex;gap:8px}
+  .manual input{
+    flex:1;background:var(--card);border:1px solid var(--line);border-radius:12px;
+    color:#fff;padding:13px;font-size:15px;font-family:inherit;direction:ltr;text-align:center;
+  }
+  .manual button{background:var(--line);border:none;color:#fff;border-radius:12px;padding:0 18px;font-family:inherit;font-size:14px}
+
+  #log{margin-top:14px;font-size:12px;color:var(--muted);max-height:170px;overflow:auto}
+  #log div{padding:7px 10px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
+  #log .t{opacity:.6;direction:ltr}
+  #err{margin-top:10px;color:#fca5a5;font-size:12px;white-space:pre-wrap;direction:ltr;text-align:left}
+  .hide{display:none!important}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎫 اسکن ورودی<span id="net" class="dot"></span></h1>
+  <button id="statsBtn" class="btn ghost" style="width:auto;margin:0;padding:8px 12px">↻ آمار</button>
+</header>
+
+<div class="stats">
+  <div class="stat"><b id="sIn">–</b><span>وارد شده</span></div>
+  <div class="stat"><b id="sLeft">–</b><span>باقی‌مانده</span></div>
+  <div class="stat"><b id="sPaid">–</b><span>کل پرداختی</span></div>
+</div>
+
+<button id="startBtn" class="btn">شروع اسکن 📷</button>
+
+<div id="reader"></div>
+
+<div class="row hide" id="camCtl">
+  <button id="torchBtn" class="btn ghost">🔦 چراغ</button>
+  <button id="flipBtn"  class="btn ghost">🔄 دوربین</button>
+  <button id="stopBtn"  class="btn ghost">⏹ توقف</button>
+</div>
+
+<div id="result"></div>
+
+<div class="manual">
+  <input id="manualId" placeholder="TKT-26-XXXXXXXXXX" autocomplete="off" spellcheck="false">
+  <button id="manualBtn">بررسی</button>
+</div>
+
+<div id="err"></div>
+<div id="log"></div>
+
+<script>
+/* ==========================================================================
+   ⚙️  تنظیمات — این دو مقدار را پر کنید
+   ========================================================================== */
+const SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbxgM5U26ZJ3MWs3N5G6Iu_XNxPeR5klflJNKVdnxmGCeiI7FaOazvZO7u7WpgenA1LU/exec";  // لینک .../exec از Apps Script
+const GUARD_TOKEN = "51e57848297b45b5";                          // همان توکنی که منو نشان داد (اگر ساختید)
+const GATE_NAME   = "Gate-1";                    // اسم درب/نگهبان، در لاگ ثبت می‌شود
+const RESET_MS    = 3000;                        // چند ثانیه نتیجه نمایش داده شود
+/* ========================================================================== */
+
+const $ = id => document.getElementById(id);
+const qr = new Html5Qrcode("reader", { verbose:false });
+
+let running = false, torchOn = false, facing = "environment";
+let busy = false, lastCode = "", lastAt = 0;
+
+/* ---------- صدا و لرزش ---------- */
+let actx = null;
+function beep(freq, ms, type){
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type||"sine"; o.frequency.value = freq;
+    o.connect(g); g.connect(actx.destination);
+    g.gain.setValueAtTime(.001, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.35, actx.currentTime+.01);
+    g.gain.exponentialRampToValueAtTime(.001, actx.currentTime+ms/1000);
+    o.start(); o.stop(actx.currentTime + ms/1000);
+  }catch(e){}
+}
+const feedback = {
+  ok:   () => { beep(880,120); setTimeout(()=>beep(1320,140),110); navigator.vibrate?.(80); },
+  warn: () => { beep(440,220,"square"); navigator.vibrate?.([60,60,60]); },
+  bad:  () => { beep(200,380,"sawtooth"); navigator.vibrate?.([120,80,120]); }
+};
+
+/* ---------- وضعیت شبکه ---------- */
+function net(){ $("net").className = "dot " + (navigator.onLine ? "on" : "off"); }
+addEventListener("online", net); addEventListener("offline", net); net();
+
+/* ---------- شروع/توقف دوربین ---------- */
+$("startBtn").onclick = async () => {
+  $("err").textContent = "";
+  try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+
+  if (location.protocol !== "https:" && location.hostname !== "localhost"){
+    $("err").textContent = "⚠️ دوربین فقط روی HTTPS کار می‌کند. صفحه را از لینک https باز کنید.";
+    return;
+  }
+  await start();
+};
+
+async function start(){
+  try{
+    await qr.start(
+      { facingMode: facing },
+      { fps:12, qrbox:{width:260,height:260}, aspectRatio:1.0,
+        experimentalFeatures:{ useBarCodeDetectorIfSupported:true } },
+      onScan,
+      () => {}   // خطاهای فریم‌به‌فریم را نادیده بگیر
+    );
+    running = true;
+    $("startBtn").classList.add("hide");
+    $("camCtl").classList.remove("hide");
+  }catch(e){
+    $("err").textContent = "خطا در روشن کردن دوربین:\n" + e +
+      "\n\nراهنما: در تنظیمات مرورگر دسترسی دوربین را Allow کنید و صفحه را روی HTTPS باز کنید.";
+  }
+}
+
+$("stopBtn").onclick = async () => {
+  if (!running) return;
+  await qr.stop(); qr.clear();
+  running = false;
+  $("startBtn").classList.remove("hide");
+  $("camCtl").classList.add("hide");
+};
+
+$("flipBtn").onclick = async () => {
+  facing = facing === "environment" ? "user" : "environment";
+  if (running){ await qr.stop(); qr.clear(); running=false; }
+  await start();
+};
+
+$("torchBtn").onclick = async () => {
+  try{
+    torchOn = !torchOn;
+    await qr.applyVideoConstraints({ advanced:[{ torch: torchOn }] });
+    $("torchBtn").textContent = torchOn ? "🔦 خاموش" : "🔦 چراغ";
+  }catch(e){ $("err").textContent = "این دستگاه از چراغ پشتیبانی نمی‌کند."; }
+};
+
+/* ---------- اسکن ---------- */
+function onScan(text){
+  const now = Date.now();
+  // ضدلرزش: یک QR در ۲.۵ ثانیه فقط یک بار پردازش شود
+  if (busy) return;
+  if (text === lastCode && now - lastAt < 2500) return;
+  lastCode = text; lastAt = now;
+  verify(text);
+}
+
+$("manualBtn").onclick = () => {
+  const v = $("manualId").value.trim();
+  if (v) { verify(v); $("manualId").value = ""; }
+};
+$("manualId").addEventListener("keydown", e => { if (e.key === "Enter") $("manualBtn").click(); });
+
+async function verify(code){
+  busy = true;
+  show("neutral", "⏳ در حال بررسی…");
+
+  const url = SCRIPT_URL
+    + "?id="    + encodeURIComponent(code)
+    + "&gate="  + encodeURIComponent(GATE_NAME)
+    + "&token=" + encodeURIComponent(GUARD_TOKEN)
+    + "&_="     + Date.now();
+
+  try{
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const r = await fetch(url, { method:"GET", redirect:"follow", signal:ctrl.signal });
+    clearTimeout(timer);
+    render(await r.json(), code);
+  }catch(e){
+    feedback.bad();
+    show("invalid", "🌐 خطای اتصال", (navigator.onLine ? String(e) : "اینترنت قطع است") );
+    addLog(code, "خطای شبکه");
+  }finally{
+    setTimeout(() => { busy = false; hide(); }, RESET_MS);
+  }
+}
+
+function render(res, code){
+  const t = res.ticketType ? res.ticketType.split(" - ")[0] + " — " + (res.ticketType.split(" - ")[1]||"") : "";
+  switch(res.status){
+    case "success":
+      feedback.ok();
+      show("success", "✅ تایید شد",
+        `<b>${esc(res.name)}</b><br><span class="k">نوع بلیط</span> ${esc(res.ticketType)}<br>
+         <span class="k">کد</span> <span dir="ltr">${esc(res.id)}</span>`);
+      addLog(res.name || code, "ورود ✅"); refreshStats();
+      break;
+    case "valid_preview":
+      feedback.ok();
+      show("success", "✅ معتبر (ثبت نشد)", esc(res.name));
+      break;
+    case "already_used":
+      feedback.warn();
+      show("used", "⚠️ قبلاً استفاده شده",
+        `<b>${esc(res.name||"")}</b><br><span class="k">ورود قبلی</span> <span dir="ltr">${esc(res.arrivalDate||"?")}</span>`);
+      addLog(res.name || code, "تکراری ⚠️");
+      break;
+    case "not_valid":
+      feedback.bad();
+      show("invalid", res.reason === "unpaid" ? "⛔ پرداخت نشده" : "⛔ بلیط فعال نیست",
+        esc(res.name||"") + (t ? "<br>"+esc(res.ticketType) : ""));
+      addLog(res.name || code, "پرداخت‌نشده ⛔");
+      break;
+    case "unauthorized":
+      feedback.bad(); show("invalid","🔒 دسترسی ندارید","توکن نگهبان اشتباه است."); break;
+    case "busy":
+      show("neutral","⏳ شلوغ است","دوباره اسکن کنید."); break;
+    case "error":
+      feedback.bad(); show("invalid","⛔ خطای سرور", esc(res.message||"")); break;
+    default:
+      feedback.bad();
+      show("invalid", "❌ نامعتبر",
+        res.reason === "bad_signature" ? "امضای بلیط جعلی است" :
+        res.reason === "not_found"     ? "این کد در سیستم نیست" : esc(res.message||""));
+      addLog(code, "نامعتبر ❌");
+  }
+}
+
+function show(cls, title, details){
+  const el = $("result");
+  el.className = cls;
+  el.style.display = "block";
+  el.innerHTML = title + (details ? `<div id="details">${details}</div>` : "");
+}
+function hide(){ $("result").style.display = "none"; }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function addLog(who, what){
+  const d = document.createElement("div");
+  d.innerHTML = `<span>${esc(who)} — ${what}</span><span class="t">${new Date().toLocaleTimeString('fa-IR')}</span>`;
+  $("log").prepend(d);
+  while ($("log").children.length > 40) $("log").lastChild.remove();
+}
+
+/* ---------- آمار ---------- */
+async function refreshStats(){
+  try{
+    const r = await fetch(SCRIPT_URL + "?action=stats&token=" + encodeURIComponent(GUARD_TOKEN) + "&_=" + Date.now());
+    const s = await r.json();
+    if (s.status === "ok"){
+      $("sIn").textContent   = s.checkedIn;
+      $("sLeft").textContent = s.remaining;
+      $("sPaid").textContent = s.paid;
+    }
+  }catch(e){}
+}
+$("statsBtn").onclick = refreshStats;
+refreshStats();
+setInterval(refreshStats, 60000);
+
+/* ---------- جلوگیری از خاموش شدن صفحه ---------- */
+(async () => { try{ await navigator.wakeLock?.request("screen"); }catch(e){} })();
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState === "visible"){ try{ await navigator.wakeLock?.request("screen"); }catch(e){} }
+});
+</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3ad0d085d14847d',t:'MTc4OTM2NDM2Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
