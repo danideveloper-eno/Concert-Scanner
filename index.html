@@ -458,6 +458,42 @@
 
   .manual-wrap input::placeholder{color:#8f8f8f}
 
+  .token-wrap{
+    margin-top:14px;
+    display:grid;
+    gap:10px;
+  }
+
+  .token-input{
+    width:100%;
+    min-width:0;
+    border-radius:16px;
+    border:1px solid rgba(255,255,255,.10);
+    background:rgba(255,255,255,.04);
+    color:#fff;
+    padding:15px 16px;
+    font-size:15px;
+    font-family:inherit;
+    text-align:left;
+    direction:ltr;
+    outline:none;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);
+  }
+
+  .token-input::placeholder{color:#8f8f8f}
+
+  .token-actions{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0, 1fr));
+    gap:10px;
+  }
+
+  .hint{
+    color:var(--muted);
+    font-size:12px;
+    line-height:1.6;
+  }
+
   .mini-btn{
     border-radius:16px;
     padding:0 18px;
@@ -589,6 +625,7 @@
     .stats{grid-template-columns:1fr}
     .button-row{grid-template-columns:1fr}
     .manual-wrap{grid-template-columns:1fr}
+    .token-actions{grid-template-columns:1fr}
     .info-grid{grid-template-columns:1fr}
     .topbar{flex-direction:column;align-items:stretch}
     .scanner-head,.section-head{padding:14px 14px 0}
@@ -610,7 +647,7 @@
       </div>
       <div class="stack">
         <div class="net-pill"><span id="net" class="dot"></span><span id="netText">Online</span></div>
-        <div class="clock-pill" id="clock">--:--:--</div>
+        <div class="clock-pill" id="clock">TR --:--:--</div>
       </div>
     </div>
 
@@ -710,10 +747,6 @@
               <div class="value" id="infoGate">Gate-1</div>
             </div>
             <div class="info-card">
-              <div class="tag">API Endpoint</div>
-              <div class="value" id="infoApi">Not Set</div>
-            </div>
-            <div class="info-card">
               <div class="tag">Connection</div>
               <div class="value" id="infoNet">Online</div>
             </div>
@@ -721,6 +754,20 @@
               <div class="tag">Last Result</div>
               <div class="value" id="lastResult">Waiting</div>
             </div>
+            <div class="info-card">
+              <div class="tag">Token Status</div>
+              <div class="value" id="tokenState">Not Saved</div>
+            </div>
+          </div>
+
+          <div class="token-wrap">
+            <input id="guardTokenInput" class="token-input" type="password" placeholder="Enter guard token">
+            <div class="token-actions">
+              <button id="toggleTokenBtn" class="btn ghost" type="button">Show</button>
+              <button id="saveTokenBtn" class="mini-btn" type="button">Save Token</button>
+              <button id="clearTokenBtn" class="btn ghost" type="button">Clear</button>
+            </div>
+            <div class="hint" id="tokenHint">Saved locally on this device and used automatically.</div>
           </div>
         </div>
       </section>
@@ -746,9 +793,11 @@
 
 <script>
 const SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbxgM5U26ZJ3MWs3N5G6Iu_XNxPeR5klflJNKVdnxmGCeiI7FaOazvZO7u7WpgenA1LU/exec";
-const GUARD_TOKEN = "51e57848297b45b5";
+const GUARD_TOKEN = "";
 const GATE_NAME   = "Gate-Main";
 const RESET_MS    = 3200;
+const APP_TIMEZONE = "Europe/Istanbul";
+const TOKEN_STORAGE_KEY = "concert_guard_token";
 
 const $ = id => document.getElementById(id);
 const qr = new Html5Qrcode("reader", { verbose:false });
@@ -761,10 +810,10 @@ let lastCode = "";
 let lastAt = 0;
 let wakeLock = null;
 let actx = null;
+let guardToken = "";
 
 $("gateLabel").textContent = GATE_NAME;
 $("infoGate").textContent = GATE_NAME;
-$("infoApi").textContent = SCRIPT_URL && SCRIPT_URL !== "PASTE_YOUR_EXEC_URL_HERE" ? SCRIPT_URL.replace(/^https?:\/\//,'') : "Not Set";
 
 function setError(message){
   const el = $("err");
@@ -787,6 +836,60 @@ function setDeviceChip(){
 
 function setLastResult(text){
   $("lastResult").textContent = text;
+}
+
+function currentGuardToken(){
+  return $("guardTokenInput").value.trim() || guardToken || GUARD_TOKEN || "";
+}
+
+function updateTokenUi(){
+  const hasToken = !!currentGuardToken();
+  $("tokenState").textContent = hasToken ? "Saved" : "Not Saved";
+  $("tokenHint").textContent = hasToken
+    ? "Saved locally in this browser and used automatically."
+    : "Enter the guard token once and save it on this device.";
+}
+
+function loadGuardToken(){
+  try{
+    guardToken = localStorage.getItem(TOKEN_STORAGE_KEY) || GUARD_TOKEN || "";
+  }catch(e){
+    guardToken = GUARD_TOKEN || "";
+  }
+  $("guardTokenInput").value = guardToken;
+  updateTokenUi();
+}
+
+function saveGuardToken(){
+  guardToken = $("guardTokenInput").value.trim();
+  try{
+    if (guardToken) localStorage.setItem(TOKEN_STORAGE_KEY, guardToken);
+    else localStorage.removeItem(TOKEN_STORAGE_KEY);
+  }catch(e){}
+  updateTokenUi();
+  setLastResult(guardToken ? "Token Saved" : "Token Cleared");
+}
+
+function clearGuardToken(){
+  guardToken = "";
+  $("guardTokenInput").value = "";
+  try{ localStorage.removeItem(TOKEN_STORAGE_KEY); }catch(e){}
+  updateTokenUi();
+  setLastResult("Token Cleared");
+}
+
+function toggleGuardTokenVisibility(){
+  const input = $("guardTokenInput");
+  const show = input.type === "password";
+  input.type = show ? "text" : "password";
+  $("toggleTokenBtn").textContent = show ? "Hide" : "Show";
+}
+
+function turkeyTime(date, withDate){
+  const opts = withDate
+    ? { timeZone: APP_TIMEZONE, day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }
+    : { timeZone: APP_TIMEZONE, hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false };
+  return new Intl.DateTimeFormat('en-GB', opts).format(date);
 }
 
 function beep(freq, ms, type){
@@ -820,7 +923,7 @@ function net(){
 }
 
 function tickClock(){
-  $("clock").textContent = new Date().toLocaleTimeString('en-US', { hour12:false });
+  $("clock").textContent = "TR " + turkeyTime(new Date(), false);
 }
 
 async function pingApi(){
@@ -938,6 +1041,14 @@ $("manualId").addEventListener("keydown", e => {
   if (e.key === "Enter") $("manualBtn").click();
 });
 
+$("saveTokenBtn").onclick = saveGuardToken;
+$("clearTokenBtn").onclick = clearGuardToken;
+$("toggleTokenBtn").onclick = toggleGuardTokenVisibility;
+$("guardTokenInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") saveGuardToken();
+});
+$("guardTokenInput").addEventListener("input", updateTokenUi);
+
 async function verify(code){
   busy = true;
   setError("");
@@ -947,7 +1058,7 @@ async function verify(code){
   const url = SCRIPT_URL
     + "?id=" + encodeURIComponent(code)
     + "&gate=" + encodeURIComponent(GATE_NAME)
-    + "&token=" + encodeURIComponent(GUARD_TOKEN)
+    + "&token=" + encodeURIComponent(currentGuardToken())
     + "&_=" + Date.now();
 
   try{
@@ -1088,7 +1199,7 @@ function addLog(who, what){
   d.innerHTML = `
     <div class="log-row">
       <div class="log-main">${esc(who)} — ${esc(what)}</div>
-      <div class="log-time">${new Date().toLocaleTimeString('en-US', { hour12:false })}</div>
+      <div class="log-time">${turkeyTime(new Date(), false)}</div>
     </div>`;
   $("log").prepend(d);
   while ($("log").children.length > 40) $("log").lastChild.remove();
@@ -1097,7 +1208,7 @@ function addLog(who, what){
 async function refreshStats(){
   if (!SCRIPT_URL || SCRIPT_URL === "PASTE_YOUR_EXEC_URL_HERE") return;
   try{
-    const r = await fetch(SCRIPT_URL + "?action=stats&token=" + encodeURIComponent(GUARD_TOKEN) + "&_=" + Date.now());
+    const r = await fetch(SCRIPT_URL + "?action=stats&token=" + encodeURIComponent(currentGuardToken()) + "&_=" + Date.now());
     const s = await r.json();
     if (s.status === "ok") {
       $("sIn").textContent = s.checkedIn;
@@ -1111,6 +1222,7 @@ $("statsBtn").onclick = refreshStats;
 
 addEventListener("online", net);
 addEventListener("offline", net);
+loadGuardToken();
 net();
 setDeviceChip();
 tickClock();
@@ -1129,5 +1241,5 @@ document.addEventListener("visibilitychange", async () => {
   }
 });
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3aeb007c9cc37a9',t:'MTc4OTM4MTUyNQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
