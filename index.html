@@ -795,7 +795,9 @@
 const SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbxgM5U26ZJ3MWs3N5G6Iu_XNxPeR5klflJNKVdnxmGCeiI7FaOazvZO7u7WpgenA1LU/exec";
 const GUARD_TOKEN = "";
 const GATE_NAME   = "Gate-Main";
-const RESET_MS    = 3200;
+const RESULT_VISIBLE_MS = 1600;
+const RELEASE_BUSY_MS = 450;
+const DUPLICATE_WINDOW_MS = 900;
 const APP_TIMEZONE = "Europe/Istanbul";
 const TOKEN_STORAGE_KEY = "concert_guard_token";
 
@@ -811,6 +813,8 @@ let lastAt = 0;
 let wakeLock = null;
 let actx = null;
 let guardToken = "";
+let busyTimer = null;
+let hideTimer = null;
 
 $("gateLabel").textContent = GATE_NAME;
 $("infoGate").textContent = GATE_NAME;
@@ -969,7 +973,7 @@ async function start(){
     await qr.start(
       { facingMode: facing },
       {
-        fps: 12,
+        fps: 18,
         qrbox: { width: 260, height: 260 },
         aspectRatio: 1,
         experimentalFeatures: { useBarCodeDetectorIfSupported: true }
@@ -1023,7 +1027,7 @@ $("torchBtn").onclick = async () => {
 function onScan(text){
   const now = Date.now();
   if (busy) return;
-  if (text === lastCode && now - lastAt < 2500) return;
+  if (text === lastCode && now - lastAt < DUPLICATE_WINDOW_MS) return;
   lastCode = text;
   lastAt = now;
   verify(text);
@@ -1074,11 +1078,7 @@ async function verify(code){
     show("invalid", "🌐 Connection Error", navigator.onLine ? String(e) : "Internet connection is offline");
     addLog(code, "Network error");
   }finally{
-    setTimeout(() => {
-      busy = false;
-      if (running) setStatusChip("Scanning");
-      hide();
-    }, RESET_MS);
+    schedulePostScanReset();
   }
 }
 
@@ -1180,6 +1180,18 @@ function hide(){
   $("result").style.display = "none";
 }
 
+function schedulePostScanReset(){
+  clearTimeout(busyTimer);
+  clearTimeout(hideTimer);
+  busyTimer = setTimeout(() => {
+    busy = false;
+    if (running) setStatusChip("Scanning");
+  }, RELEASE_BUSY_MS);
+  hideTimer = setTimeout(() => {
+    hide();
+  }, RESULT_VISIBLE_MS);
+}
+
 function esc(s){
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
     '&':'&amp;',
@@ -1241,5 +1253,5 @@ document.addEventListener("visibilitychange", async () => {
   }
 });
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3aeb007c9cc37a9',t:'MTc4OTM4MTUyNQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3aecd5edfec0f8b',t:'MTc4OTM4MjcyNw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
